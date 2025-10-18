@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface ExtractedData {
-  invoice_type: string | null // Added invoice type field
+  invoice_type: string | null
   name: string | null
   address: string | null
   phone_number: string | null
@@ -17,20 +17,45 @@ interface ExtractedData {
   fuse_size: string | null
   grid_provider: string | null
   energy_company: string | null
+  anlaggnings_id: string | null
+  total_consumed_kwh_period: number | null
+  expected_consumption_year_kwh: number | null
+  expected_source: string | null
+  historical_monthly_kwh: Array<{ month: string; kwh: number }> | null
+  history_reason: string | null
+}
+
+interface CombinedData {
+  invoice_type_1: string | null
+  invoice_type_2: string | null
+  name: string | null
+  address: string | null
+  phone_number: string | null
+  email: string | null
+  fuse_size: string | null
+  grid_provider: string | null
+  energy_company: string | null
+  anlaggnings_id: string | null
+  total_consumed_kwh_period: number | null
+  expected_consumption_year_kwh: number | null
+  expected_source: string | null
+  historical_monthly_kwh: Array<{ month: string; kwh: number }> | null
+  history_reason: string | null
 }
 
 export default function PDFExtractorPage() {
   const [file, setFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [extractedData, setExtractedData] = useState<ExtractedData | null>(null)
+  const [firstBillData, setFirstBillData] = useState<ExtractedData | null>(null)
+  const [secondBillData, setSecondBillData] = useState<ExtractedData | null>(null)
+  const [currentStep, setCurrentStep] = useState<1 | 2>(1)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
     if (selectedFile && selectedFile.type === "application/pdf") {
       setFile(selectedFile)
       setError(null)
-      setExtractedData(null)
     } else {
       setError("Vänligen välj en giltig PDF-fil")
       setFile(null)
@@ -45,7 +70,6 @@ export default function PDFExtractorPage() {
 
     setLoading(true)
     setError(null)
-    setExtractedData(null)
 
     try {
       const formData = new FormData()
@@ -58,23 +82,71 @@ export default function PDFExtractorPage() {
 
       const data = await response.json()
 
+      console.log("[v0] Extraction response:", data)
+      console.log("[v0] Current step:", currentStep)
+
       if (!response.ok) {
         throw new Error(data.error || "Något gick fel vid extrahering")
       }
 
-      setExtractedData(data)
+      if (currentStep === 1) {
+        setFirstBillData(data)
+        console.log("[v0] Set first bill data:", data)
+        setFile(null)
+      } else {
+        setSecondBillData(data)
+        console.log("[v0] Set second bill data:", data)
+        setFile(null)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ett oväntat fel inträffade")
+      console.log("[v0] Error during extraction:", err)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleReset = () => {
+  const handleNextBill = () => {
+    console.log("[v0] Moving to step 2")
+    setCurrentStep(2)
     setFile(null)
-    setExtractedData(null)
     setError(null)
   }
+
+  const handleReset = () => {
+    setFile(null)
+    setFirstBillData(null)
+    setSecondBillData(null)
+    setCurrentStep(1)
+    setError(null)
+  }
+
+  const getCombinedData = (): CombinedData => {
+    const combined: CombinedData = {
+      invoice_type_1: firstBillData?.invoice_type || null,
+      invoice_type_2: secondBillData?.invoice_type || null,
+      name: firstBillData?.name || secondBillData?.name || null,
+      address: firstBillData?.address || secondBillData?.address || null,
+      phone_number: firstBillData?.phone_number || secondBillData?.phone_number || null,
+      email: firstBillData?.email || secondBillData?.email || null,
+      fuse_size: firstBillData?.fuse_size || secondBillData?.fuse_size || null,
+      grid_provider: firstBillData?.grid_provider || secondBillData?.grid_provider || null,
+      energy_company: firstBillData?.energy_company || secondBillData?.energy_company || null,
+      anlaggnings_id: firstBillData?.anlaggnings_id || secondBillData?.anlaggnings_id || null,
+      total_consumed_kwh_period:
+        firstBillData?.total_consumed_kwh_period || secondBillData?.total_consumed_kwh_period || null,
+      expected_consumption_year_kwh:
+        firstBillData?.expected_consumption_year_kwh || secondBillData?.expected_consumption_year_kwh || null,
+      expected_source: firstBillData?.expected_source || secondBillData?.expected_source || null,
+      historical_monthly_kwh: firstBillData?.historical_monthly_kwh || secondBillData?.historical_monthly_kwh || null,
+      history_reason: firstBillData?.history_reason || secondBillData?.history_reason || null,
+    }
+    return combined
+  }
+
+  const combinedData = firstBillData || secondBillData ? getCombinedData() : null
+
+  console.log("[v0] Render state - currentStep:", currentStep, "firstBillData:", !!firstBillData, "loading:", loading)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 p-4 md:p-8">
@@ -86,11 +158,37 @@ export default function PDFExtractorPage() {
           </p>
         </div>
 
+        <div className="mb-6 flex items-center justify-center gap-4">
+          <div
+            className={`flex items-center gap-2 ${currentStep === 1 ? "text-blue-600 dark:text-blue-400 font-semibold" : "text-gray-400"}`}
+          >
+            <div
+              className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 1 ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-600"}`}
+            >
+              1
+            </div>
+            <span>Dokument 1</span>
+          </div>
+          <div className="w-12 h-0.5 bg-gray-300" />
+          <div
+            className={`flex items-center gap-2 ${currentStep === 2 ? "text-blue-600 dark:text-blue-400 font-semibold" : "text-gray-400"}`}
+          >
+            <div
+              className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 2 ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-600"}`}
+            >
+              2
+            </div>
+            <span>Dokument 2</span>
+          </div>
+        </div>
+
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle>Ladda upp dokument</CardTitle>
+            <CardTitle>{currentStep === 1 ? "Ladda upp första dokumentet" : "Ladda upp andra dokumentet"}</CardTitle>
             <CardDescription>
-              Välj en PDF-fil för att extrahera namn, adress, kontaktinformation och energidata
+              {currentStep === 1
+                ? "Ladda upp valfri faktura - systemet identifierar automatiskt om det är en nät- eller energifaktura"
+                : "Ladda upp den andra fakturan för att komplettera informationen"}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -141,7 +239,12 @@ export default function PDFExtractorPage() {
                     "Extrahera data"
                   )}
                 </Button>
-                {(file || extractedData) && (
+                {currentStep === 1 && firstBillData && !loading && (
+                  <Button onClick={handleNextBill} variant="default">
+                    Nästa dokument
+                  </Button>
+                )}
+                {(file || firstBillData || secondBillData) && (
                   <Button onClick={handleReset} variant="outline" disabled={loading}>
                     Återställ
                   </Button>
@@ -157,11 +260,15 @@ export default function PDFExtractorPage() {
           </Alert>
         )}
 
-        {extractedData && (
+        {combinedData && (
           <Card>
             <CardHeader>
               <CardTitle>Extraherad information</CardTitle>
-              <CardDescription>Data från ditt PDF-dokument</CardDescription>
+              <CardDescription>
+                {secondBillData
+                  ? "Kombinerad data från båda dokumenten"
+                  : "Data från första dokumentet - ladda upp andra dokumentet för att komplettera"}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
@@ -177,15 +284,72 @@ export default function PDFExtractorPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    <TableRow label="Fakturatyp (Invoice Type)" value={extractedData.invoice_type} />{" "}
-                    {/* Added invoice type row */}
-                    <TableRow label="Namn (Name)" value={extractedData.name} />
-                    <TableRow label="Adress (Address)" value={extractedData.address} />
-                    <TableRow label="Telefonnummer (Phone Number)" value={extractedData.phone_number} />
-                    <TableRow label="E-post (Email)" value={extractedData.email} />
-                    <TableRow label="Säkringsstorlek (Fuse Size)" value={extractedData.fuse_size} />
-                    <TableRow label="Nätägare (Grid Provider)" value={extractedData.grid_provider} />
-                    <TableRow label="Elbolag (Energy Company)" value={extractedData.energy_company} />
+                    {combinedData.invoice_type_1 && (
+                      <TableRow label="Första dokumentet (First Document)" value={combinedData.invoice_type_1} />
+                    )}
+                    {combinedData.invoice_type_2 && (
+                      <TableRow label="Andra dokumentet (Second Document)" value={combinedData.invoice_type_2} />
+                    )}
+                    <TableRow label="Namn (Name)" value={combinedData.name} />
+                    <TableRow label="Adress (Address)" value={combinedData.address} />
+                    <TableRow label="Telefonnummer (Phone Number)" value={combinedData.phone_number} />
+                    <TableRow label="E-post (Email)" value={combinedData.email} />
+                    <TableRow label="Säkringsstorlek (Fuse Size)" value={combinedData.fuse_size} />
+                    <TableRow label="Nätägare (Grid Provider)" value={combinedData.grid_provider} />
+                    <TableRow label="Elbolag (Energy Company)" value={combinedData.energy_company} />
+                    <TableRow label="Anläggnings-ID (Installation ID)" value={combinedData.anlaggnings_id} />
+                    <TableRow
+                      label="Periodens förbrukning kWh (Period Consumption)"
+                      value={
+                        combinedData.total_consumed_kwh_period !== null
+                          ? `${combinedData.total_consumed_kwh_period} kWh`
+                          : null
+                      }
+                    />
+                    <TableRow
+                      label="Beräknad årsförbrukning kWh (Expected Annual Consumption)"
+                      value={
+                        combinedData.expected_consumption_year_kwh !== null
+                          ? `${combinedData.expected_consumption_year_kwh} kWh`
+                          : null
+                      }
+                    />
+                    {combinedData.expected_source && combinedData.expected_source !== "not_available" && (
+                      <TableRow
+                        label="Förbrukningskälla (Consumption Source)"
+                        value={
+                          combinedData.expected_source === "beraknad_arsforbrukning"
+                            ? "Beräknad årsförbrukning"
+                            : "Verklig årsförbrukning (proxy)"
+                        }
+                      />
+                    )}
+                    {combinedData.historical_monthly_kwh && combinedData.historical_monthly_kwh.length > 0 && (
+                      <tr className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors">
+                        <td className="py-3 px-4 font-medium text-sm align-top">
+                          Historisk månadsförbrukning (Monthly History)
+                        </td>
+                        <td className="py-3 px-4 text-sm">
+                          <div className="space-y-1">
+                            {combinedData.historical_monthly_kwh.map((item, idx) => (
+                              <div key={idx}>
+                                {item.month}: {item.kwh} kWh
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    {combinedData.history_reason && (
+                      <TableRow
+                        label="Historikorsak (History Reason)"
+                        value={
+                          combinedData.history_reason === "chart_only_no_numeric_values"
+                            ? "Endast diagram utan numeriska värden"
+                            : combinedData.history_reason
+                        }
+                      />
+                    )}
                   </tbody>
                 </table>
               </div>

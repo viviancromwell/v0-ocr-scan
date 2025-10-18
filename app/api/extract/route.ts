@@ -33,14 +33,31 @@ export async function POST(request: NextRequest) {
     const prompt = `Du är en AI-assistent som extraherar strukturerad information från svenska PDF-dokument.
 
 Extrahera följande information från dokumentet:
-- Fakturatyp (invoice_type) - identifiera om detta är en "Energifaktura" eller "Nätfaktura"
+
+VIKTIGT - Fakturatyp (invoice_type):
+- "Nätfaktura" = Faktura från nätägare/nätbolag (grid operator) som ansvarar för elnätet och infrastrukturen. Dessa fakturor innehåller ofta säkringsstorlek, nätavgifter, och överföringsavgifter.
+- "Energifaktura" = Faktura från elhandelsbolag (energy retailer) som säljer själva elenergin. Dessa fakturor innehåller ofta elförbrukning, elpris per kWh, och energikostnader.
+
+Om dokumentet innehåller säkringsstorlek (t.ex. 16A, 20A, 25A) är det troligen en Nätfaktura.
+Om dokumentet fokuserar på elförbrukning och elpris är det troligen en Energifaktura.
+
+Extrahera:
+- Fakturatyp (invoice_type) - "Energifaktura" eller "Nätfaktura"
 - Namn (name) - kundens namn
 - Adress (address) - kundens adress
 - Telefonnummer (phone_number) - ENDAST kundens telefonnummer, INTE företagets eller Kundcenters nummer
 - E-post (email) - ENDAST kundens e-postadress, INTE företagets eller Kundcenters e-post
 - Säkringsstorlek (fuse_size) - lägg alltid till 'A' suffix om det saknas (t.ex. "25" blir "25A")
-- Nätleverantör (grid_provider)
-- Energibolag (energy_company)
+- Nätleverantör (grid_provider) - namnet på nätbolaget/nätägaren
+- Energibolag (energy_company) - namnet på elhandelsbolaget
+
+NYA FÄLT - Anläggnings-ID och förbrukning:
+- Anläggnings-ID (anlaggnings_id) - Sök efter "Anläggnings-ID", "Anl id", "Anläggningsid", "EAN", eller "GS1". Detta är en unik identifierare för kundens elanslutning.
+- Periodens förbrukning (total_consumed_kwh_period) - Den fakturerade periodens totala kWh-förbrukning. Sök efter rader med "Förbrukning … kWh", "kWh … för perioden", eller "Avstämd period … kWh". Returnera endast siffran (t.ex. 450.5).
+- Beräknad årsförbrukning (expected_consumption_year_kwh) - Sök efter "Beräknad årsförbrukning" eller liknande prognoser. Om endast "Verklig årsförbrukning" finns, använd det värdet. Returnera endast siffran.
+- Förbrukningskälla (expected_source) - Om du använder "Beräknad årsförbrukning", sätt till "beraknad_arsforbrukning". Om du använder "Verklig årsförbrukning", sätt till "verklig_arsforbrukning_proxy". Om ingen årsförbrukning finns, sätt till "not_available".
+- Historisk månadsförbrukning (historical_monthly_kwh) - Om PDF:en innehåller numeriska månadsvärden i text (t.ex. "Jan: 350 kWh, Feb: 420 kWh"), returnera en array med objekt: [{"month": "YYYY-MM", "kwh": number}]. Om det endast finns ett stapeldiagram utan numeriska etiketter, returnera null och sätt history_reason till "chart_only_no_numeric_values". Försök INTE att OCR:a staplar.
+- Historikorsak (history_reason) - Om historical_monthly_kwh är null, förklara varför (t.ex. "chart_only_no_numeric_values", "no_historical_data", "data_not_readable").
 
 VIKTIGT: Om du hittar telefonnummer eller e-postadresser som tillhör företaget, Kundcenter, eller kundtjänst, ignorera dem. Extrahera ENDAST kundens personliga kontaktinformation.
 
@@ -53,7 +70,13 @@ Svara ENDAST med ett JSON-objekt i följande format:
   "email": "extraherat e-post eller null",
   "fuse_size": "extraherad säkringsstorlek eller null",
   "grid_provider": "extraherad nätleverantör eller null",
-  "energy_company": "extraherat energibolag eller null"
+  "energy_company": "extraherat energibolag eller null",
+  "anlaggnings_id": "extraherat anläggnings-ID eller null",
+  "total_consumed_kwh_period": number eller null,
+  "expected_consumption_year_kwh": number eller null,
+  "expected_source": "beraknad_arsforbrukning eller verklig_arsforbrukning_proxy eller not_available",
+  "historical_monthly_kwh": [{"month": "YYYY-MM", "kwh": number}] eller null,
+  "history_reason": "förklaring om historical_monthly_kwh är null, annars null"
 }
 
 Om ett fält inte hittas, använd null. Svara ENDAST med JSON, ingen annan text.`
